@@ -1,5 +1,4 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand};
 use futures_util::{SinkExt, StreamExt};
 use log::{debug, error};
@@ -13,13 +12,13 @@ use std::{
     ops::Range,
     path::PathBuf,
 };
-use unicode_segmentation::UnicodeSegmentation;
 use warp::{
     ws::{Message, WebSocket},
     Filter,
 };
 
 mod json_rpc;
+mod parser;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -66,7 +65,7 @@ struct ServerArgs {
 #[derive(Debug, Clone, Serialize)]
 struct QueryResponse {
     total_display_lines: usize,
-    display_lines: Vec<DisplayLine>,
+    display_lines: Vec<parser::DisplayLine>,
     row_offset: usize,
 }
 
@@ -81,15 +80,6 @@ impl QueryResponse {
             row_offset: start,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DisplayLine {
-    lln: usize, // logical line number
-    ts: Option<DateTime<Utc>>,
-    level: i32,
-    text: String,
-    matches: Option<Vec<(usize, usize)>>,
 }
 
 #[tokio::main]
@@ -142,54 +132,19 @@ fn babble(args: BabbleArgs) -> Result<()> {
     Ok(())
 }
 
-/// Parse timestamp and log level from a log line
-fn parse_log_prefix(line: &str) -> Option<(DateTime<Utc>, i32)> {
-    let (hd, _) = line.split_once("]")?;
-    let mut parts = hd.split_whitespace();
-    let ts: DateTime<Utc> = parts.next()?.strip_prefix("[")?.parse().ok()?;
-    let ll = match parts.next()? {
-        "ERROR" => 1,
-        "WARN" => 2,
-        "INFO" => 3,
-        "DEBUG" => 4,
-        "TRACE" => 5,
-        _ => 0,
-    };
-    Some((ts, ll))
-}
-
 fn query(args: QueryArgs) -> Result<QueryResponse> {
-    let filter = args.filter.map(|f| Regex::new(&f)).transpose()?;
+    let filter = args.filter.as_ref().map(|s| Regex::new(s)).transpose()?;
     let file = File::open(&args.log_file)?;
     let reader = BufReader::new(file);
     let mut total_display_lines = 0;
     let mut display_lines = Vec::new();
     for (lln, line) in reader.lines().enumerate() {
         let line = line?;
-        if let Some(filter) = &filter {
-            if !filter.is_match(&line) {
-                continue;
-            }
-        }
-        let prefix = parse_log_prefix(&line);
-        let mut chunks = line
-            .graphemes(true)
-            .collect::<Vec<&str>>()
-            .chunks(args.cols)
-            .map(|chunk| chunk.concat())
-            .collect::<Vec<String>>();
-        for chunk in chunks.drain(..) {
-            total_display_lines += 1;
-            let matches = filter.as_ref().map(|filter| {
-                filter.find_iter(&chunk).map(|m| (m.start(), m.end())).collect()
-            });
-            display_lines.push(DisplayLine {
-                lln,
-                ts: prefix.map(|(ts, _)| ts),
-                level: prefix.map(|(_, ll)| ll).unwrap_or(0),
-                text: chunk,
-                matches,
-            });
+        if let Some(parsed) =
+            parser::parse_log_line(lln, args.cols, &line, filter.as_ref())?
+        {
+            total_display_lines += parsed.len();
+            display_lines.extend(parsed);
         }
     }
     let res = QueryResponse { total_display_lines, display_lines, row_offset: 0 };
@@ -223,7 +178,8 @@ async fn handle_ws(ws: WebSocket) -> Result<()> {
                     && new_query.params.filter == last_query.filter
                     && new_query.params.log_file == last_query.log_file
                 {
-                    let to = new_query.params.to.unwrap_or(last_response.total_display_lines);
+                    let to =
+                        new_query.params.to.unwrap_or(last_response.total_display_lines);
                     tx.send(Message::text(serde_json::to_string(&JsonRpcResponse {
                         id: new_query.id,
                         result: Some(last_response.range(new_query.params.from..to)),

@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { Inter, Source_Code_Pro } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
 
 const source_code_pro = Source_Code_Pro({
   subsets: ["latin"],
@@ -21,8 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} ${source_code_pro.className}`}>{children}</body>
+    <html lang="en" className={`${inter.variable} ${source_code_pro.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

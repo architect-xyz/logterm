@@ -49,11 +49,12 @@ export default function Home() {
       }
     }
   }, [inFlightRequests, lastMessage]);
-  // display measurement and react-window callbacks
+  // display measurement
   const [ref, { width: lineWidth, height }] = useMeasure();
   const [ruler, { width: charWidth, height: charHeight }] = useMeasure();
   const cols = useDebounce(lineWidth && charWidth && Math.floor(lineWidth / charWidth), 300);
   const rows = useDebounce(height && charHeight && Math.floor(height / charHeight), 300);
+  // reload logs on resize
   const reloadLog = useCallback((): Promise<void> => {
     if (cols) {
       const requestId = nextRequestId.current++;
@@ -72,37 +73,60 @@ export default function Home() {
     }
     return Promise.resolve();
   }, [sendMessage, cols]);
-  // reload logs on resize
   useEffect(() => {
     if (cols && rows) {
       reloadLog();
     }
   }, [reloadLog, cols, rows]);
+  // react-window state
+  const windowRef = useRef<FixedSizeList>(null);
+  const [visibleStartIndex, setVisibleStartIndex] = useState(0);
+  const [visibleEndIndex, setVisibleEndIndex] = useState(0);
+  const isTailing = visibleEndIndex == data.total_display_lines - 1;
   return (
     <main className={styles.main}>
       <nav className={styles.nav}>
         <input type="text" placeholder="Filter logs by regex..."/>
         <button>Update</button>
         <button>Clear</button>
+        <button
+          hidden={isTailing}
+          onClick={() => {
+            if (windowRef.current) {
+              windowRef.current.scrollToItem(data.total_display_lines - 1);
+            }
+          }}
+        >Scroll to bottom</button>
       </nav>
-      <div ref={ruler} className={styles.ruler}>0</div>
-      <div ref={ref} className={styles.logs}>
-        <AutoSizer>
-          {({ width, height }) => (
-            <FixedSizeList
-              width={width}
-              height={height}
-              itemCount={data.total_display_lines}
-              itemSize={charHeight ?? 0}
-            >
-              {({ index, style }) => (
-                <div style={style}>
-                  {data.display_lines[index]?.text || "#not found"}
-                </div>
-              )}
-            </FixedSizeList>
-          )}
-        </AutoSizer>
+      <div className={styles.logs}>
+        <div ref={ref} className={styles.logsInner}>
+          <div ref={ruler} className={styles.ruler}>0</div>
+          <AutoSizer>
+            {({width, height}) => (
+              <FixedSizeList
+                ref={windowRef}
+                width={width}
+                height={height}
+                itemCount={data.total_display_lines}
+                itemSize={charHeight ?? 0}
+                overscanCount={10}
+                onItemsRendered={({visibleStartIndex, visibleStopIndex}) => {
+                  setVisibleStartIndex(visibleStartIndex);
+                  setVisibleEndIndex(visibleStopIndex);
+                }}
+              >
+                {({index, style}) => (
+                  <div style={style}>
+                    {data.display_lines[index]?.text || "#not found"}
+                  </div>
+                )}
+              </FixedSizeList>
+            )}
+          </AutoSizer>
+        </div>
+      </div>
+      <div className={styles.status}>
+        <div>{visibleStartIndex} – {visibleEndIndex} / {data.total_display_lines - 1} display lines</div>
       </div>
     </main>
   );
