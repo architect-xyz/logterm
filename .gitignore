@@ -1,3 +1,4 @@
 .idea/
 var/
 target/
+.DS_Store

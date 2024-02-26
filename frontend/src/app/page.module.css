@@ -1,0 +1,53 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 100vh;
+  border: 1px solid red;
+}
+
+.nav {
+  display: flex;
+  width: 100%;
+  padding: 1rem;
+  gap: 0.5rem;
+  border-bottom: 1px solid rgba(var(--callout-border-rgb), 0.3);
+}
+
+.nav input {
+  font-size: 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--border-radius);
+  background: rgba(var(--card-rgb), 0.1);
+  border: 1px solid rgba(var(--card-border-rgb), 0.15);
+}
+
+.nav button {
+  font-size: 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--border-radius);
+  background: rgba(var(--card-rgb), 0.1);
+  border: 1px solid rgba(var(--card-border-rgb), 0.15);
+  cursor: pointer;
+}
+
+.logs {
+  width: 100%;
+  flex-grow: 1;
+  border: 1px solid magenta;
+  font-family: var(--font-source-code-pro);
+  font-size: 1rem;
+  color: #dddddd;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+.ruler {
+  font-family: var(--font-source-code-pro);
+  font-size: 1rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+}
