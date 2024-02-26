@@ -15,11 +15,15 @@ type QueryResponse = {
 
 type DisplayLine = {
   lln: number,
+  ll?: number | null,
   ts?: Date | null,
-  level: number,
-  text: string,
-  matches?: [number, number][] | null,
+  spans: DisplaySpan[],
 };
+
+type DisplaySpan = {
+  text: string,
+  label: string
+}
 
 type Completion<T> = (value?: T | PromiseLike<T>) => void;
 
@@ -117,7 +121,17 @@ export default function Home() {
               >
                 {({index, style}) => (
                   <div style={style}>
-                    {data.display_lines[index]?.text || "#not found"}
+                    {(data.display_lines[index]?.spans || []).map((span, j) => (
+                      <span
+                        key={j}
+                        className={
+                          styles[`span-${span.label}${span.label == 'level' 
+                            ? ('-' + data.display_lines[index]?.ll ?? 5) 
+                            : ''
+                          }`]}>
+                        {span.text}
+                      </span>
+                    ))}
                   </div>
                 )}
               </FixedSizeList>

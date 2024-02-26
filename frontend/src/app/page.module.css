@@ -51,6 +51,34 @@
   overflow-y: scroll;
 }
 
+.span-noise {
+  color: rgba(var(--foreground-rgb), 0.5);
+}
+
+.span-timestamp {
+  color: rgba(var(--foreground-rgb), 0.5);
+}
+
+.span-target {
+  color: rgba(var(--foreground-rgb), 0.5);
+}
+
+.span-level-0 {
+  color: red;
+}
+
+.span-level-1 {
+  color: yellow;
+}
+
+.span-level-2 {
+  color: lightgreen;
+}
+
+.span-level-3 {
+  color: deepskyblue;
+}
+
 .ruler {
   position: absolute;
   top: 0;
