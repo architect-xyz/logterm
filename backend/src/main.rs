@@ -53,8 +53,8 @@ struct QueryArgs {
     log_file: PathBuf,
     /// From display line number
     from: usize,
-    /// To display line number
-    to: usize,
+    /// To display line number; none for all
+    to: Option<usize>,
 }
 
 #[derive(Args)]
@@ -67,12 +67,19 @@ struct ServerArgs {
 struct QueryResponse {
     total_display_lines: usize,
     display_lines: Vec<DisplayLine>,
+    row_offset: usize,
 }
 
 impl QueryResponse {
     fn range(&self, range: Range<usize>) -> QueryResponse {
-        let display_lines = self.display_lines[range].to_vec();
-        QueryResponse { total_display_lines: self.total_display_lines, display_lines }
+        let start = range.start.clamp(0, self.display_lines.len());
+        let end = range.end.clamp(0, self.display_lines.len());
+        let display_lines = self.display_lines[start..end].to_vec();
+        QueryResponse {
+            total_display_lines: self.total_display_lines,
+            display_lines,
+            row_offset: start,
+        }
     }
 }
 
@@ -91,8 +98,10 @@ async fn main() -> Result<()> {
     match cli.command {
         Command::Babble(args) => babble(args)?,
         Command::Query(args) => {
-            let range = args.from..args.to;
+            let range_from = args.from;
+            let range_to = args.to;
             let res = query(args)?;
+            let range = range_from..range_to.unwrap_or(res.total_display_lines);
             for i in range {
                 if let Some(line) = res.display_lines.get(i) {
                     println!("{}", serde_json::to_string_pretty(line)?);
@@ -183,7 +192,7 @@ fn query(args: QueryArgs) -> Result<QueryResponse> {
             });
         }
     }
-    let res = QueryResponse { total_display_lines, display_lines };
+    let res = QueryResponse { total_display_lines, display_lines, row_offset: 0 };
     Ok(res)
 }
 
@@ -208,27 +217,30 @@ async fn handle_ws(ws: WebSocket) -> Result<()> {
         if let Ok(s) = msg.to_str() {
             debug!("received: {}", s);
             let new_query: JsonRpcQuery<QueryArgs> = serde_json::from_str(s)?;
-            let new_range = new_query.params.from..new_query.params.to;
             // if query is substantially similar to the last one, use the cached response
             if let Some((last_query, last_response)) = last.as_ref() {
                 if new_query.params.cols == last_query.cols
                     && new_query.params.filter == last_query.filter
                     && new_query.params.log_file == last_query.log_file
                 {
+                    let to = new_query.params.to.unwrap_or(last_response.total_display_lines);
                     tx.send(Message::text(serde_json::to_string(&JsonRpcResponse {
                         id: new_query.id,
-                        result: Some(last_response.range(new_range)),
+                        result: Some(last_response.range(new_query.params.from..to)),
                         error: None,
                     })?))
                     .await?;
                     continue;
                 }
             }
+            let range_from = new_query.params.from;
+            let range_to = new_query.params.to;
             let response = query(new_query.params.clone())?;
+            let range = range_from..range_to.unwrap_or(response.total_display_lines);
             last = Some((new_query.params, response.clone()));
             tx.send(Message::text(serde_json::to_string(&JsonRpcResponse {
                 id: new_query.id,
-                result: Some(response.range(new_range)),
+                result: Some(response.range(range)),
                 error: None,
             })?))
             .await?;
