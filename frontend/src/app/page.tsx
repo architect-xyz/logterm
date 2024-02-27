@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from "react";
 import {produce} from "immer";
-import {useDebounce, useMeasure} from "@uidotdev/usehooks";
+import {useDebounce, useMeasure, usePrevious} from "@uidotdev/usehooks";
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList } from "react-window";
@@ -93,6 +93,12 @@ export default function Home() {
   const [visibleStartIndex, setVisibleStartIndex] = useState(0);
   const [visibleEndIndex, setVisibleEndIndex] = useState(0);
   const isTailing = visibleEndIndex == data.total_display_lines - 1;
+  const wasTailing = usePrevious(isTailing);
+  useEffect(() => {
+    if (wasTailing) {
+      windowRef.current?.scrollToItem(data.total_display_lines - 1);
+    }
+  }, [data, isTailing]);
   return (
     <main className={styles.main}>
       <nav className={styles.nav}>
@@ -147,6 +153,11 @@ export default function Home() {
       </div>
       <div className={styles.status}>
         <div>{visibleStartIndex} – {visibleEndIndex} / {data.total_display_lines - 1} display lines</div>
+        <div className={styles['status-scroll']}>
+          <span hidden={isTailing}>SCROLLING</span>
+          <span className="glowing" hidden={!isTailing}>TAILING</span>
+          <div className={`dot ${isTailing ? 'glowing' : ''}`} hidden={!isTailing}></div>
+        </div>
       </div>
     </main>
   );

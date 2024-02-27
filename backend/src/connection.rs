@@ -88,11 +88,13 @@ impl Context {
         file.seek(SeekFrom::Start(self.pos)).await?;
         let mut contents = String::new();
         file.read_to_string(&mut contents).await?;
+        debug!("pre: pos = {}, lines read = {}", self.pos, self.lines_read);
         // iterate over complete lines only (ending \r\n or \n)
         for line in contents.split_inclusive("\n") {
             if !line.ends_with("\n") {
                 break;
             }
+            self.pos += line.len() as u64;
             let line = line.trim_end_matches("\n");
             let line = line.trim_end_matches("\r");
             if let Ok(Some(p)) = parser::parse_log_line(
@@ -103,9 +105,9 @@ impl Context {
             ) {
                 lines.extend(p);
             }
-            self.pos += line.len() as u64;
             self.lines_read += 1;
         }
+        debug!("post: pos = {}, lines read = {}", self.pos, self.lines_read);
         Ok(lines)
     }
 }
@@ -177,6 +179,8 @@ pub async fn handle_ws(ws: WebSocket) -> Result<()> {
                 if let Some(msg) = msg {
                     let msg = msg?;
                     handle_ws_message(&mut tx, &mut ctx, msg).await?;
+                } else {
+                    break Ok(());
                 }
             }
             r = herald_of_the_change(&mut ctx).fuse() => {

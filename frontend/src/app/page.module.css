@@ -91,10 +91,22 @@
 
 .status {
   display: flex;
+  justify-content: space-between;
   width: 100%;
   padding: 1rem;
   gap: 0.5rem;
   border-top: 1px solid rgba(var(--callout-border-rgb), 0.3);
   font-family: var(--font-inter);
   color: rgba(var(--foreground-rgb), 0.7);
+}
+
+.status-scroll {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-scroll span {
+  font-weight: 700;
+  cursor: pointer;
 }
