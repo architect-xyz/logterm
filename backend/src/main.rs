@@ -3,16 +3,11 @@ use clap::{Args, Parser, Subcommand};
 use log::error;
 use rand::Rng;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    net::SocketAddr,
-    ops::Range,
-    path::PathBuf,
-};
+use serde::Deserialize;
+use std::{net::SocketAddr, path::PathBuf};
 use warp::Filter;
 
+mod config;
 mod connection;
 mod json_rpc;
 mod parser;
@@ -28,10 +23,10 @@ struct Cli {
 enum Command {
     /// Generate random log file of specified length
     Babble(BabbleArgs),
-    /// Test query a log file
-    Query(QueryArgs),
     /// Run the log server
     Server(ServerArgs),
+    /// Test tailing a log file
+    Tail(TailArgs),
 }
 
 #[derive(Args)]
@@ -40,43 +35,19 @@ struct BabbleArgs {
     lines: usize,
 }
 
-#[derive(Args, Debug, Clone, Deserialize)]
-struct QueryArgs {
-    #[arg(long)]
-    cols: usize,
-    #[arg(long)]
-    filter: Option<String>,
-    log_file: PathBuf,
-    /// From display line number
-    from: usize,
-    /// To display line number; none for all
-    to: Option<usize>,
-}
-
 #[derive(Args)]
 struct ServerArgs {
     #[arg(long, default_value = "127.0.0.1:9000")]
     bind: SocketAddr,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct QueryResponse {
-    total_display_lines: usize,
-    display_lines: Vec<parser::DisplayLine>,
-    row_offset: usize,
-}
-
-impl QueryResponse {
-    fn range(&self, range: Range<usize>) -> QueryResponse {
-        let start = range.start.clamp(0, self.display_lines.len());
-        let end = range.end.clamp(0, self.display_lines.len());
-        let display_lines = self.display_lines[start..end].to_vec();
-        QueryResponse {
-            total_display_lines: self.total_display_lines,
-            display_lines,
-            row_offset: start,
-        }
-    }
+#[derive(Args, Debug, Clone, Deserialize)]
+struct TailArgs {
+    #[arg(long)]
+    cols: usize,
+    #[arg(long)]
+    filter: Option<String>,
+    log_file: PathBuf,
 }
 
 #[tokio::main]
@@ -84,18 +55,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Babble(args) => babble(args)?,
-        Command::Query(args) => {
-            let range_from = args.from;
-            let range_to = args.to;
-            let res = query(args)?;
-            let range = range_from..range_to.unwrap_or(res.total_display_lines);
-            for i in range {
-                if let Some(line) = res.display_lines.get(i) {
-                    println!("{}", serde_json::to_string_pretty(line)?);
-                }
-            }
-        }
         Command::Server(args) => server(args).await?,
+        Command::Tail(args) => tail(args).await?,
     }
     Ok(())
 }
@@ -129,25 +90,6 @@ fn babble(args: BabbleArgs) -> Result<()> {
     Ok(())
 }
 
-fn query(args: QueryArgs) -> Result<QueryResponse> {
-    let filter = args.filter.as_ref().map(|s| Regex::new(s)).transpose()?;
-    let file = File::open(&args.log_file)?;
-    let reader = BufReader::new(file);
-    let mut total_display_lines = 0;
-    let mut display_lines = Vec::new();
-    for (lln, line) in reader.lines().enumerate() {
-        let line = line?;
-        if let Some(parsed) =
-            parser::parse_log_line(lln, args.cols, &line, filter.as_ref())?
-        {
-            total_display_lines += parsed.len();
-            display_lines.extend(parsed);
-        }
-    }
-    let res = QueryResponse { total_display_lines, display_lines, row_offset: 0 };
-    Ok(res)
-}
-
 async fn server(args: ServerArgs) -> Result<()> {
     env_logger::init();
     let routes = warp::any().and(warp::ws()).map(|ws: warp::ws::Ws| {
@@ -159,4 +101,26 @@ async fn server(args: ServerArgs) -> Result<()> {
     });
     warp::serve(routes).run(args.bind).await;
     Ok(())
+}
+
+async fn tail(args: TailArgs) -> Result<()> {
+    env_logger::init();
+    let filter = args.filter.as_ref().map(|s| Regex::new(s)).transpose()?;
+    let (mut ctx, mut rx_tail) =
+        connection::Context::new(args.log_file.clone(), args.cols, filter)?;
+    loop {
+        rx_tail.changed().await?;
+        match { *rx_tail.borrow_and_update() } {
+            Some(len) => {
+                let inc = ctx.read_to(len).await?;
+                for line in inc {
+                    println!("{}", serde_json::to_string(&line)?);
+                }
+            }
+            None => {
+                println!("file lost");
+                return Ok(());
+            }
+        }
+    }
 }

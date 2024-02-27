@@ -133,7 +133,7 @@ impl DisplayLinesBuilder {
         if self.cum_width + span_width > self.cols {
             // the span too wide, try a soft break
             match span.split_soft_once() {
-                // CR alee: this will soft break more often than needed
+                // CR alee: this will soft break way more often than needed
                 Some((l, w, r)) => {
                     self.push_span(l)?;
                     self.push_span(w)?;
