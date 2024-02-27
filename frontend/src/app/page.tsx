@@ -1,16 +1,20 @@
 "use client";
 
+import {useCallback, useEffect, useRef, useState} from "react";
+import {produce} from "immer";
 import {useDebounce, useMeasure} from "@uidotdev/usehooks";
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList } from "react-window";
 import styles from "./page.module.css";
-import {useCallback, useEffect, useRef, useState} from "react";
 
-type QueryResponse = {
-  total_display_lines: number;
+type Logs = {
+  total_display_lines: number,
+  display_lines: DisplayLine[],
+};
+
+type LogsTail = {
   display_lines: DisplayLine[];
-  row_offset: number;
 };
 
 type DisplayLine = {
@@ -33,23 +37,26 @@ export default function Home() {
   const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl);
   const nextRequestId = useRef(0);
   const inFlightRequests = useRef<{ [id: number]: Completion<void> }>({});
-  const [data, setData] = useState<QueryResponse>({
+  const [data, setData] = useState<Logs>({
     total_display_lines: 0,
     display_lines: [],
-    row_offset: 0
   });
   useEffect(() => {
     const data = lastMessage?.data;
     if (data) {
       const response = JSON.parse(data);
       const id = response["id"] as number;
-      const result = response["result"] as QueryResponse;
       if (inFlightRequests.current[id]) {
         inFlightRequests.current[id]();
         delete inFlightRequests.current[id];
-        setData(result);
-      } else {
-        console.warn("unexpected response:", id);
+      } else if (response["method"] === "tail") {
+        const params = response["params"];
+        setData(produce((data) => {
+          data.total_display_lines += params.display_lines.length;
+          data.display_lines.push(...params.display_lines);
+        }));
+      } else if (response["method"] === "done") {
+        console.warn("file done");
       }
     }
   }, [inFlightRequests, lastMessage]);
@@ -66,11 +73,10 @@ export default function Home() {
         inFlightRequests.current[requestId] = resolve;
         sendMessage(JSON.stringify({
           id: requestId,
-          method: "query",
+          method: "logs",
           params: {
             log_file: "./var/test.log",
             cols,
-            from: 0,
           }
         }));
       });

@@ -174,11 +174,13 @@ pub async fn handle_ws(ws: WebSocket) -> Result<()> {
     loop {
         select_biased! {
             msg = rx.next().fuse() => {
-                if let Some(Ok(msg)) = msg {
+                if let Some(msg) = msg {
+                    let msg = msg?;
                     handle_ws_message(&mut tx, &mut ctx, msg).await?;
                 }
             }
             r = herald_of_the_change(&mut ctx).fuse() => {
+                debug!("changed");
                 let (ctx, rx_tail) = r?;
                 handle_changed(&mut tx, ctx, rx_tail).await?;
             }
