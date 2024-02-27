@@ -4,7 +4,7 @@ use log::error;
 use rand::Rng;
 use regex::Regex;
 use serde::Deserialize;
-use std::{net::SocketAddr, path::PathBuf};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use warp::Filter;
 
 mod config;
@@ -39,6 +39,8 @@ struct BabbleArgs {
 struct ServerArgs {
     #[arg(long, default_value = "127.0.0.1:9000")]
     bind: SocketAddr,
+    #[arg(long, short)]
+    config: PathBuf,
 }
 
 #[derive(Args, Debug, Clone, Deserialize)]
@@ -92,13 +94,18 @@ fn babble(args: BabbleArgs) -> Result<()> {
 
 async fn server(args: ServerArgs) -> Result<()> {
     env_logger::init();
-    let routes = warp::any().and(warp::ws()).map(|ws: warp::ws::Ws| {
-        ws.on_upgrade(|ws| async move {
-            if let Err(e) = connection::handle_ws(ws).await {
-                error!("while handling websocket connection: {}", e);
-            }
-        })
-    });
+    // TODO: switch to toml to keep consistent with s7
+    let config: Arc<config::Config> =
+        Arc::new(serde_yaml::from_str(&std::fs::read_to_string(&args.config)?)?);
+    let routes = warp::any().map(move || config.clone()).and(warp::ws()).map(
+        |config: Arc<config::Config>, ws: warp::ws::Ws| {
+            ws.on_upgrade(|ws| async move {
+                if let Err(e) = connection::handle_ws(config, ws).await {
+                    error!("while handling websocket connection: {}", e);
+                }
+            })
+        },
+    );
     warp::serve(routes).run(args.bind).await;
     Ok(())
 }

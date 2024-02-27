@@ -3,9 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Method {
+    /// Request to list all available logsets
+    List,
     /// Request to change which logset to display and tail
     Logs,
     /// Notification from the server, additional display lines
@@ -13,6 +15,12 @@ pub enum Method {
     /// Notification form the server that the logset has fused,
     /// or no more tailing is possible
     Done,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestHeader {
+    pub id: u64,
+    pub method: Method,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

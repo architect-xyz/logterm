@@ -1,14 +1,15 @@
 use crate::{
+    config::Config,
     json_rpc,
     parser::{self, DisplayLine},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures_util::{select_biased, stream::SplitSink, FutureExt, SinkExt, StreamExt};
 use log::{debug, error};
 use notify::{event::EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{future, path::PathBuf};
+use std::{future, path::PathBuf, sync::Arc};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt, SeekFrom},
@@ -20,7 +21,7 @@ use warp::ws::{Message, WebSocket};
 pub struct LogsRequest {
     pub cols: usize,
     pub filter: Option<String>,
-    pub log_file: PathBuf,
+    pub logset: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,9 +62,11 @@ impl Context {
                         }
                         EventKind::Modify(ModifyKind::Name(_)) => {
                             debug!("watched file {} was renamed", file.display());
+                            tx.send_replace(None);
                         }
                         EventKind::Remove(_) => {
                             debug!("watched file {} was removed", file.display());
+                            tx.send_replace(None);
                         }
                         _ => {}
                     },
@@ -125,21 +128,37 @@ async fn herald_of_the_change(
 }
 
 async fn handle_ws_message(
+    config: &Config,
     tx: &mut SplitSink<WebSocket, Message>,
     ctx: &mut Option<(Context, watch::Receiver<Option<u64>>)>,
     msg: Message,
 ) -> Result<()> {
     if let Ok(s) = msg.to_str() {
         debug!("received: {}", s);
-        let q: json_rpc::Request<LogsRequest> = serde_json::from_str(s)?;
-        let filter = q.params.filter.as_ref().map(|s| Regex::new(s)).transpose()?;
-        *ctx = Some(Context::new(q.params.log_file, q.params.cols, filter)?);
-        tx.send(Message::text(serde_json::to_string(&json_rpc::Response {
-            id: q.id,
-            result: Some(()),
-            error: None,
-        })?))
-        .await?;
+        let h: json_rpc::RequestHeader = serde_json::from_str(s)?;
+        if h.method == json_rpc::Method::List {
+            let logsets = config.logsets.keys().cloned().collect::<Vec<_>>();
+            tx.send(Message::text(serde_json::to_string(&json_rpc::Response {
+                id: h.id,
+                result: Some(logsets),
+                error: None,
+            })?))
+            .await?;
+        } else if h.method == json_rpc::Method::Logs {
+            let q: json_rpc::Request<LogsRequest> = serde_json::from_str(s)?;
+            let filter = q.params.filter.as_ref().map(|s| Regex::new(s)).transpose()?;
+            let file = config
+                .logsets
+                .get(&q.params.logset)
+                .ok_or_else(|| anyhow!("logset not found"))?;
+            *ctx = Some(Context::new(file.clone(), q.params.cols, filter)?);
+            tx.send(Message::text(serde_json::to_string(&json_rpc::Response {
+                id: q.id,
+                result: Some(()),
+                error: None,
+            })?))
+            .await?;
+        }
     }
     Ok(())
 }
@@ -170,7 +189,7 @@ async fn handle_changed(
     Ok(())
 }
 
-pub async fn handle_ws(ws: WebSocket) -> Result<()> {
+pub async fn handle_ws(config: Arc<Config>, ws: WebSocket) -> Result<()> {
     let (mut tx, mut rx) = ws.split();
     let mut ctx: Option<(Context, watch::Receiver<Option<u64>>)> = None;
     loop {
@@ -178,7 +197,7 @@ pub async fn handle_ws(ws: WebSocket) -> Result<()> {
             msg = rx.next().fuse() => {
                 if let Some(msg) = msg {
                     let msg = msg?;
-                    handle_ws_message(&mut tx, &mut ctx, msg).await?;
+                    handle_ws_message(&config, &mut tx, &mut ctx, msg).await?;
                 } else {
                     break Ok(());
                 }

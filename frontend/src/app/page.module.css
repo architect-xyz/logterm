@@ -32,6 +32,53 @@
   cursor: pointer;
 }
 
+.select {
+  position: relative;
+}
+
+.select-button {
+  font-size: 1rem;
+  width: 8rem;
+  text-align: left;
+  padding: 0.8rem 1rem;
+  border-radius: var(--border-radius);
+  background: rgba(var(--card-rgb), 0.1);
+  border: 1px solid rgba(var(--card-border-rgb), 0.15);
+  cursor: pointer;
+}
+
+.select-options {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  top: 100%;
+  width: 150%;
+  margin-top: 0.8rem;
+  list-style-type: none;
+  border: 1px solid rgba(var(--card-border-rgb), 0.15);
+  border-radius: var(--border-radius);
+  background: black;
+  padding: 0.8rem 1rem;
+}
+
+.select-options li {
+  font-family: var(--font-inter);
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  cursor: pointer;
+}
+
+.select-options li:hover {
+  background: #dddddd;
+  color: #000000;
+}
+
+.filter {
+  flex-grow: 1;
+}
+
 .logs {
   display: flex;
   flex-direction: column;
