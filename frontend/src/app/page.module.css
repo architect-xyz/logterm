@@ -40,6 +40,8 @@
   font-size: 1rem;
   width: 8rem;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
   padding: 0.8rem 1rem;
   border-radius: var(--border-radius);
   background: rgba(var(--card-rgb), 0.1);
