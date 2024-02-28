@@ -48,7 +48,7 @@ export default function Home() {
     }
   }, [logSets, selectedLogSet]);
   // jsonrpc-over-websocket handling
-  const [socketUrl] = useState('ws://127.0.0.1:9000');
+  const [socketUrl] = useState(process.env.NEXT_PUBLIC_WS_URL ?? 'ws://127.0.0.1:9000');
   const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl);
   const nextRequestId = useRef(0);
   const inFlightRequests = useRef<{ [id: number]: string }>({});
