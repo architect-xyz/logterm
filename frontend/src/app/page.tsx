@@ -6,7 +6,7 @@ import {useDebounce, useMeasure, usePrevious} from "@uidotdev/usehooks";
 import useWebSocket, { ReadyState } from 'react-use-websocket';
 import { Listbox } from '@headlessui/react'
 import AutoSizer from "react-virtualized-auto-sizer";
-import { FixedSizeList } from "react-window";
+import {FixedSizeList, ListOnScrollProps} from "react-window";
 import styles from "./page.module.css";
 
 type Logs = {
@@ -129,14 +129,22 @@ export default function Home() {
   const windowRef = useRef<FixedSizeList>(null);
   const [visibleStartIndex, setVisibleStartIndex] = useState(0);
   const [visibleEndIndex, setVisibleEndIndex] = useState(0);
-  const isTailing = visibleEndIndex == data.total_display_lines - 1;
-  const wasTailing = usePrevious(isTailing);
-  const prevTotalDisplayLines = usePrevious(data.total_display_lines);
+  const [isTailing, setIsTailing] = useState(false);
   useEffect(() => {
-    if (wasTailing && data.total_display_lines !== prevTotalDisplayLines) {
+    if (isTailing) {
       windowRef.current?.scrollToItem(data.total_display_lines - 1);
     }
-  }, [data, wasTailing, prevTotalDisplayLines]);
+  }, [data, isTailing]);
+  // CR alee: this scroll behavior is still kinda jank, how can I get scroll-to-tail to be less finicky?
+  const onScroll = useCallback((e: ListOnScrollProps) => {
+    if (!e.scrollUpdateWasRequested) { // user input
+      if (visibleEndIndex < data.total_display_lines - 1) {
+        setIsTailing(false);
+      } else {
+        setIsTailing(true);
+      }
+    }
+  }, [data, visibleEndIndex]);
   return (
     <main className={styles.main}>
       <nav className={styles.nav}>
@@ -153,12 +161,9 @@ export default function Home() {
         <button onClick={() => clearFilter()}>Clear</button>
         <button
           hidden={isTailing}
-          onClick={() => {
-            if (windowRef.current) {
-              windowRef.current.scrollToItem(data.total_display_lines - 1);
-            }
-          }}
-        >Scroll to bottom</button>
+          onClick={() => setIsTailing(true)}>
+          Tail
+        </button>
       </nav>
       <div className={styles.logs}>
         <div ref={ref} className={styles.logsInner}>
@@ -176,6 +181,7 @@ export default function Home() {
                   setVisibleStartIndex(visibleStartIndex);
                   setVisibleEndIndex(visibleStopIndex);
                 }}
+                onScroll={onScroll}
               >
                 {({index, style}) => (
                   <div style={style}>
