@@ -49,7 +49,12 @@ export default function Home() {
   }, [logSets, selectedLogSet]);
   // jsonrpc-over-websocket handling
   const [socketUrl] = useState(process.env.NEXT_PUBLIC_WS_URL ?? 'ws://127.0.0.1:9000');
-  const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl);
+  const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl, {
+    shouldReconnect: (_closeEvent) => true,
+    // CR alee: make it apparent that the page has died after the reconnect attempts is exhausted
+    reconnectAttempts: 1000,
+    reconnectInterval: 1000,
+  });
   const nextRequestId = useRef(0);
   const inFlightRequests = useRef<{ [id: number]: string }>({});
   const [data, setData] = useState<Logs>({
