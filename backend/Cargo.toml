@@ -2,7 +2,7 @@
 name = "logterm"
 version = "0.1.0"
 edition = "2021"
-description = "simple logs terminal"
+description = "simple logs terminal backend"
 authors = ["Architect Financial Technologies <hello@architect.xyz>"]
 categories = ["command-line-utilities"]
 keywords = ["logs", "logging", "server"]
