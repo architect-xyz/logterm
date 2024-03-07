@@ -1,8 +1,14 @@
 [package]
-name = "s8"
+name = "logterm"
 version = "0.1.0"
 edition = "2021"
-description = "simple log viewer for s7"
+description = "simple logs terminal"
+authors = ["Architect Financial Technologies <hello@architect.xyz>"]
+categories = ["command-line-utilities"]
+keywords = ["logs", "logging", "server"]
+repository = "https://github.com/architect-xyz/logterm"
+documentation = "https://docs.rs/logterm"
+license = "MIT"
 
 [dependencies]
 anyhow = "1"
